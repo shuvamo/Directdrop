@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DirectDrop</title>
+<style>
+/* Layout: one centered column. Step 1 pair with a code, step 2 drop files and watch them move. */
+:root{
+  --bg:#f3f5f4; --panel:#ffffff; --fg:#14201c; --muted:#5d6b66; --line:#d9e0dd;
+  --accent:#0b7a5a; --accent-fg:#ffffff; --warn:#b4541a; --track:#e3e9e6;
+  --display:"Bricolage Grotesque", "Trebuchet MS", system-ui, sans-serif;
+  --body:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1513; --panel:#16201d; --fg:#e8f0ec; --muted:#93a39c; --line:#26332e;
+    --accent:#3ecf9f; --accent-fg:#06231a; --warn:#f0a06a; --track:#223029; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1513; --panel:#16201d; --fg:#e8f0ec; --muted:#93a39c; --line:#26332e;
+  --accent:#3ecf9f; --accent-fg:#06231a; --warn:#f0a06a; --track:#223029; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--bg); color:var(--fg); font:16px/1.5 var(--body);
+  padding-block:32px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+main{max-width:620px; margin:0 auto; display:flex; flex-direction:column; gap:20px}
+h1{font:700 2rem/1.1 var(--display); margin:0; letter-spacing:-0.02em}
+h2{font:600 1.05rem/1.2 var(--display); margin:0}
+p{margin:0}
+.sub{color:var(--muted)}
+.panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:14px}
+.choices{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+@media (max-width:520px){.choices{grid-template-columns:1fr}}
+.choices > *{min-width:0}
+button, input{font:inherit; color:inherit}
+button{
+  cursor:pointer; border:1px solid var(--line); background:var(--panel); border-radius:10px;
+  padding:11px 16px; font-weight:600;
+}
+button.primary{background:var(--accent); color:var(--accent-fg); border-color:var(--accent)}
+button:disabled{opacity:.5; cursor:default}
+:focus-visible{outline:3px solid var(--accent); outline-offset:2px}
+input[type=text]{
+  width:100%; border:1px solid var(--line); background:var(--bg); border-radius:10px;
+  padding:12px 14px; font:600 1.4rem/1 var(--mono); letter-spacing:.3em; text-align:center;
+}
+.code{font:700 2.6rem/1 var(--mono); letter-spacing:.25em; text-align:center; padding:14px 0 14px .25em; background:var(--bg); border:1px dashed var(--line); border-radius:10px}
+.status{display:flex; align-items:center; gap:10px; font-weight:600}
+.dot{width:10px; height:10px; border-radius:50%; background:var(--warn); flex:none}
+.dot.on{background:var(--accent)}
+#drop{
+  border:2px dashed var(--line); border-radius:14px; padding:34px 16px; text-align:center;
+  display:flex; flex-direction:column; align-items:center; gap:10px; cursor:pointer; background:var(--panel);
+}
+#drop.over{border-color:var(--accent); background:var(--bg)}
+#drop strong{font:600 1.1rem var(--display)}
+.list{display:flex; flex-direction:column; gap:10px; margin:0; padding:0; list-style:none}
+.item{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:8px; min-width:0}
+.row{display:flex; justify-content:space-between; gap:12px; align-items:center; min-width:0}
+.name{font-weight:600; overflow-wrap:anywhere}
+.meta{font:.8rem var(--mono); color:var(--muted); white-space:nowrap; font-variant-numeric:tabular-nums}
+.bar{height:6px; background:var(--track); border-radius:99px; overflow:hidden}
+.bar > i{display:block; height:100%; width:0; background:var(--accent)}
+.item img, .item video{max-width:100%; max-height:260px; border-radius:8px; align-self:flex-start}
+a.dl{
+  align-self:flex-start; background:var(--accent); color:var(--accent-fg); text-decoration:none;
+  padding:8px 14px; border-radius:8px; font-weight:600;
+}
+.tag{font:600 .7rem var(--mono); text-transform:uppercase; letter-spacing:.08em; color:var(--muted)}
+.note{font-size:.85rem; color:var(--muted)}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:no-preference){.bar > i{transition:width .15s linear}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>DirectDrop</h1>
+    <p class="sub">Send photos, videos and files straight from one device to another. Nothing is uploaded or stored anywhere.</p>
+  </header>
+
+  <section id="pair" class="panel">
+    <h2>Connect two devices</h2>
+    <div class="choices">
+      <div class="panel">
+        <h2>I'm sending first</h2>
+        <p class="sub">Get a code and tell it to the other person.</p>
+        <button id="make" class="primary">Create a code</button>
+      </div>
+      <div class="panel">
+        <h2>I have a code</h2>
+        <label for="codeIn" class="sub">Enter the 6 digits</label>
+        <input id="codeIn" type="text" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="off">
+        <button id="join">Connect</button>
+      </div>
+    </div>
+    <p id="pairMsg" class="note" aria-live="polite"></p>
+  </section>
+
+  <section id="codeBox" class="panel" hidden>
+    <p class="tag">Your code</p>
+    <div class="code" id="codeShow">------</div>
+    <p class="sub">Open this page on the other device, choose "I have a code" and type these digits. Keep this tab open.</p>
+  </section>
+
+  <section id="live" hidden style="display:flex;flex-direction:column;gap:20px">
+    <div class="status"><span class="dot on"></span><span id="liveTxt">Connected</span></div>
+    <label id="drop" for="picker">
+      <strong>Drop files here or tap to choose</strong>
+      <span class="sub">Photos, videos, documents. Any type, any number.</span>
+      <input id="picker" type="file" multiple hidden>
+    </label>
+    <div>
+      <p class="tag" style="margin-bottom:8px">Transfers</p>
+      <ul id="items" class="list"></ul>
+    </div>
+    <p class="note">Both devices must stay on this page until the transfer finishes. Received files are held in memory until you save them, so very large videos (over 1 GB) may fail on phones.</p>
+  </section>
+</main>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(function(){
+  var PREFIX = "directdrop-";
+  var CHUNK = 16384;
+  var peer = null, conn = null;
+  var incoming = null; // current file being received
+  var $ = function(id){return document.getElementById(id)};
+
+  function fmt(n){
+    if(n < 1024) return n + " B";
+    var u = ["KB","MB","GB","TB"], i = -1;
+    do { n /= 1024; i++; } while(n >= 1024 && i < 3);
+    return n.toFixed(n < 10 ? 1 : 0) + " " + u[i];
+  }
+  function msg(t){ $("pairMsg").textContent = t || ""; }
+
+  function newCode(){ return String(Math.floor(Math.random()*1000000)).padStart(6,"0"); }
+
+  var peerOpts = {debug:0};
+
+  $("make").onclick = function(){
+    msg("");
+    startHost(0);
+  };
+  function startHost(tries){
+    var code = newCode();
+    var p = new Peer(PREFIX + code, peerOpts);
+    p.on("open", function(){
+      peer = p;
+      $("codeShow").textContent = code;
+      $("pair").hidden = true; $("codeBox").hidden = false;
+      p.on("connection", function(c){
+        if(conn){ c.close(); return; }
+        attach(c);
+      });
+    });
+    p.on("error", function(e){
+      if(e.type === "unavailable-id" && tries < 5){ p.destroy(); startHost(tries+1); }
+      else { msg("Could not create a code (" + e.type + "). Check your internet and try again."); }
+    });
+  }
+
+  $("join").onclick = function(){
+    var code = $("codeIn").value.replace(/\D/g,"");
+    if(code.length !== 6){ msg("Enter all 6 digits."); return; }
+    msg("Connecting...");
+    var p = new Peer(peerOpts);
+    var timer = setTimeout(function(){
+      msg("Could not connect. Check the code, and that the other device still shows it."); p.destroy();
+    }, 15000);
+    p.on("open", function(){
+      var c = p.connect(PREFIX + code, {reliable:true, serialization:"raw"});
+      c.on("open", function(){ clearTimeout(timer); peer = p; attach(c); });
+      c.on("error", function(){ clearTimeout(timer); msg("Connection failed. Try again."); });
+    });
+    p.on("error", function(e){
+      clearTimeout(timer);
+      msg(e.type === "peer-unavailable" ? "No device found with that code." : "Connection error (" + e.type + ").");
+    });
+  };
+
+  function attach(c){
+    conn = c;
+    $("pair").hidden = true; $("codeBox").hidden = true; $("live").hidden = false;
+    $("liveTxt").textContent = "Connected. Ready to send and receive.";
+    try{ if(navigator.wakeLock) navigator.wakeLock.request("screen").catch(function(){}); }catch(e){}
+    c.on("data", onData);
+    c.on("close", function(){
+      conn = null;
+      document.querySelector(".dot").classList.remove("on");
+      $("liveTxt").textContent = "Disconnected. Reload the page to pair again.";
+    });
+  }
+
+  // ---------- receiving ----------
+  function addItem(dir, name, size){
+    var li = document.createElement("li"); li.className = "item";
+    li.innerHTML = '<div class="row"><span class="name"></span><span class="meta"></span></div><div class="bar"><i></i></div>';
+    li.querySelector(".name").textContent = (dir === "in" ? "Receiving: " : "Sending: ") + name;
+    li.querySelector(".meta").textContent = "0% of " + fmt(size);
+    $("items").prepend(li);
+    return li;
+  }
+  function setProg(li, done, size){
+    var pct = size ? Math.floor(done/size*100) : 100;
+    li.querySelector(".bar > i").style.width = pct + "%";
+    li.querySelector(".meta").textContent = pct + "% of " + fmt(size);
+  }
+
+  function onData(d){
+    if(typeof d === "string"){
+      var m = JSON.parse(d);
+      if(m.t === "start"){
+        incoming = {name:m.name, size:m.size, type:m.type, parts:[], got:0, li:addItem("in", m.name, m.size)};
+      } else if(m.t === "end" && incoming){
+        finish(incoming); incoming = null;
+      }
+      return;
+    }
+    if(!incoming) return;
+    var buf = d instanceof ArrayBuffer ? d : (d.buffer ? d.buffer : d);
+    incoming.parts.push(buf);
+    incoming.got += buf.byteLength;
+    setProg(incoming.li, incoming.got, incoming.size);
+  }
+
+  function finish(f){
+    var blob = new Blob(f.parts, {type: f.type || "application/octet-stream"});
+    var url = URL.createObjectURL(blob);
+    var li = f.li;
+    li.querySelector(".name").textContent = f.name;
+    li.querySelector(".meta").textContent = fmt(f.size);
+    li.querySelector(".bar").remove();
+    if(f.type.indexOf("image/") === 0){
+      var im = document.createElement("img"); im.src = url; im.alt = f.name; li.appendChild(im);
+    } else if(f.type.indexOf("video/") === 0){
+      var v = document.createElement("video"); v.src = url; v.controls = true; v.preload = "metadata"; li.appendChild(v);
+    }
+    var a = document.createElement("a"); a.className = "dl"; a.href = url; a.download = f.name; a.textContent = "Save file";
+    li.appendChild(a);
+  }
+
+  // ---------- sending ----------
+  var queue = [], sending = false;
+  function enqueue(files){
+    for(var i=0;i<files.length;i++) queue.push(files[i]);
+    if(!sending) pump();
+  }
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+  async function pump(){
+    sending = true;
+    while(queue.length){
+      var f = queue.shift();
+      if(!conn){ break; }
+      var li = addItem("out", f.name, f.size);
+      conn.send(JSON.stringify({t:"start", name:f.name, size:f.size, type:f.type}));
+      var off = 0, dc = conn.dataChannel;
+      while(off < f.size){
+        if(!conn){ li.querySelector(".meta").textContent = "Connection lost"; break; }
+        while(dc.bufferedAmount > 4*1024*1024){ await sleep(20); }
+        var buf = await f.slice(off, off + CHUNK).arrayBuffer();
+        conn.send(buf);
+        off += buf.byteLength;
+        setProg(li, off, f.size);
+      }
+      if(conn){
+        conn.send(JSON.stringify({t:"end"}));
+        li.querySelector(".name").textContent = f.name;
+        li.querySelector(".meta").textContent = "Sent, " + fmt(f.size);
+        li.querySelector(".bar").remove();
+      }
+    }
+    sending = false;
+  }
+
+  $("picker").onchange = function(e){ enqueue(e.target.files); e.target.value = ""; };
+  var drop = $("drop");
+  ["dragenter","dragover"].forEach(function(ev){
+    drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add("over"); });
+  });
+  ["dragleave","drop"].forEach(function(ev){
+    drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove("over"); });
+  });
+  drop.addEventListener("drop", function(e){ if(e.dataTransfer.files.length) enqueue(e.dataTransfer.files); });
+})();
+</script>
+</body>
+</html>
